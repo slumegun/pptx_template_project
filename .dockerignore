@@ -1,0 +1,13 @@
+# Web image needs only frontend/, Caddyfile, and infra/Dockerfile.web
+.git/
+.env
+.env.*
+backend/
+docs/
+sample_templates/
+dev_outputs/
+examples/
+frontend/node_modules/
+frontend/dist/
+frontend/qa-screen.png
+frontend/*.tsbuildinfo

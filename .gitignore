@@ -1,0 +1,36 @@
+# Runtime data
+data/
+dev_outputs/
+*.log
+*.db
+*.db.backup-*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/qa-screen.png
+frontend/qa-*.png
+
+# Local sample templates are user-provided assets; add through Git LFS only if permitted.
+sample_templates/*.pptx
+
+# Editors / OS
+.vscode/
+.claude/
+.idea/
+.DS_Store
+Thumbs.db
+
+
+# Local materials: templates dataset, case PDF and frontend backups stay out of git
+/Датасет/
+/_backup_frontend_*/
+/*.pdf

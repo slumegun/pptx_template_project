@@ -1,0 +1,10 @@
+import type { Version } from './types'
+import { ArtifactButtons, Badge, Button, EmptyState, ModeBadge, ScreenHeading, SlidePreview, formatDate, qualityLabel, qualityTone, variantName } from './ui'
+import { Icon } from './icons'
+
+export default function HistoryPage({ versions, onOpen, onNew, onError }: { versions: Version[]; onOpen: (id: string) => void; onNew: () => void; onError: (message: string) => void }) {
+  const sorted = [...versions].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  return <div className="page"><ScreenHeading eyebrow="ВАШИ РАБОТЫ" title="История презентаций" description="Версии и файлы проекта остаются здесь. Исправленный вариант не заменяет исходную презентацию." action={<Button onClick={onNew} icon={<Icon name="plus" size={17} />}>Новая презентация</Button>} />
+    {sorted.length === 0 ? <EmptyState icon="clock" title="История пока пуста" description="Создайте первую презентацию — её варианты и последующие исправления появятся здесь." action={<Button onClick={onNew}>Начать создание</Button>} /> : <div className="history-list">{sorted.map((version, index) => <article className="card history-item" key={version.id}><button className="history-item__preview" type="button" onClick={() => onOpen(version.id)} aria-label={`Открыть версию ${index + 1}`}><SlidePreview url={version.preview_urls?.[0]} /></button><div className="history-item__info"><div className="history-item__title"><h2>{version.parent_version_id ? 'Исправленная версия' : variantName(version, (version.ordinal || 1) - 1)}</h2><Badge tone={qualityTone(version.quality_status)}>{qualityLabel(version.quality_status)}</Badge></div><p>{formatDate(version.created_at)} · {version.preview_urls?.length || 0} слайдов в предпросмотре</p><ModeBadge version={version} /><span className="history-item__id mono">Версия {version.id.slice(0, 13)}…</span></div><div className="history-item__actions"><ArtifactButtons version={version} onError={onError} /><Button variant="secondary" onClick={() => onOpen(version.id)} icon={<Icon name="arrow" size={16} />}>Открыть</Button></div></article>)}</div>}
+  </div>
+}

@@ -1,0 +1,151 @@
+name: ayushka
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aya
+      POSTGRES_USER: aya
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aya -d aya"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      AYA_DATABASE_URL: postgresql+psycopg://aya:${POSTGRES_PASSWORD}@db:5432/aya
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    healthcheck:
+      disable: true
+    restart: "no"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      AYA_DATABASE_URL: postgresql+psycopg://aya:${POSTGRES_PASSWORD}@db:5432/aya
+      AYA_REDIS_URL: redis://redis:6379/0
+      AYA_STORAGE_ROOT: /data
+      AYA_ALLOWED_ORIGINS: ${AYA_ALLOWED_ORIGINS:-http://localhost}
+      AYA_INLINE_JOBS: "false"
+    volumes:
+      - filedata:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      AYA_DATABASE_URL: postgresql+psycopg://aya:${POSTGRES_PASSWORD}@db:5432/aya
+      AYA_REDIS_URL: redis://redis:6379/0
+      AYA_STORAGE_ROOT: /data
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-openrouter}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_PROVIDER_SORT: ${OPENROUTER_PROVIDER_SORT:-throughput}
+      MODEL_TEMPLATE_ANALYST: ${MODEL_TEMPLATE_ANALYST:-qwen/qwen3-vl-32b-instruct}
+      MODEL_DECK_PLANNER: ${MODEL_DECK_PLANNER:-qwen/qwen3.8-27b}
+      MODEL_SLIDE_WORKER: ${MODEL_SLIDE_WORKER:-qwen/qwen3.8-27b}
+      MODEL_DARK_THEME_DESIGNER: ${MODEL_DARK_THEME_DESIGNER:-qwen/qwen3.8-27b}
+      MODEL_DECK_CRITIC: ${MODEL_DECK_CRITIC:-google/gemma-4-31b-it}
+      MODEL_PROMPT_CRITIC: ${MODEL_PROMPT_CRITIC:-google/gemma-4-31b-it}
+      MODEL_VISUAL_CRITIC_MODEL: ${MODEL_VISUAL_CRITIC_MODEL:-google/gemma-4-31b-it}
+      MODEL_SLIDE_REPAIR: ${MODEL_SLIDE_REPAIR:-qwen/qwen3.8-27b}
+      MODEL_VISUAL_CRITIC: ${MODEL_VISUAL_CRITIC:-1}
+      MODEL_REPAIR_ROUNDS: ${MODEL_REPAIR_ROUNDS:-1}
+      MODEL_MAX_PARALLEL: ${MODEL_MAX_PARALLEL:-4}
+      MODEL_TIMEOUT_SECONDS: ${MODEL_TIMEOUT_SECONDS:-45}
+      MODEL_REQUEST_BUDGET_SECONDS: ${MODEL_REQUEST_BUDGET_SECONDS:-75}
+      MODEL_MAX_RETRIES: ${MODEL_MAX_RETRIES:-2}
+      MODEL_RETRY_BACKOFF_SECONDS: ${MODEL_RETRY_BACKOFF_SECONDS:-1}
+      MODEL_REQUESTS_PER_MINUTE: ${MODEL_REQUESTS_PER_MINUTE:-120}
+      MODEL_TOKENS_PER_MINUTE: ${MODEL_TOKENS_PER_MINUTE:-0}
+      MODEL_ANALYSIS_RPM: ${MODEL_ANALYSIS_RPM:-60}
+      MODEL_FREE_ONLY: ${MODEL_FREE_ONLY:-0}
+      MODEL_TEMPLATE_CACHE_DIR: /data/template-cache
+      AYA_FONT_DIR: /data/fonts
+      AYA_FONT_DOWNLOAD: ${AYA_FONT_DOWNLOAD:-1}
+    volumes:
+      - filedata:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    command: ["python", "-m", "app.jobs"]
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+  reconciler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      AYA_DATABASE_URL: postgresql+psycopg://aya:${POSTGRES_PASSWORD}@db:5432/aya
+      AYA_REDIS_URL: redis://redis:6379/0
+      AYA_STORAGE_ROOT: /data
+    volumes:
+      - filedata:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    command: ["python", "-m", "app.reconcile"]
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.web
+    environment:
+      AYA_SITE_ADDRESS: ${AYA_SITE_ADDRESS:-:80}
+    ports:
+      - "${AYA_BIND_ADDRESS:-127.0.0.1}:80:80"
+      - "${AYA_BIND_ADDRESS:-127.0.0.1}:443:443"
+    volumes:
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  filedata:
+  caddydata:
+  caddyconfig:
